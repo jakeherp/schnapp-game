@@ -70,12 +70,20 @@ export function GameRoom({ gameId }: { gameId: string }) {
 
   useEffect(() => {
     const currentRound = game?.rounds[game.currentRoundIndex];
-    if (game?.status !== "playing" || currentRound?.winnerId) return;
+    const ticking =
+      game?.status === "countdown" || (game?.status === "playing" && !currentRound?.winnerId);
+    if (!ticking) return;
     const interval = setInterval(() => setNow(Date.now()), TICK_MS);
     return () => clearInterval(interval);
   }, [game]);
 
   const me = game?.players.find((p) => p.id === playerId);
+
+  useEffect(() => {
+    // A rematch starting means a fresh game is about to be played — unarm
+    // the guard so its result gets recorded too when it finishes.
+    if (game?.status === "countdown") scoreRecordedRef.current = false;
+  }, [game?.status]);
 
   useEffect(() => {
     if (!game || game.status !== "finished" || !me || scoreRecordedRef.current) return;
@@ -114,6 +122,16 @@ export function GameRoom({ gameId }: { gameId: string }) {
 
   const handleStart = useCallback(async () => {
     const res = await fetch(`/api/games/${gameId}/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId }),
+    });
+    const data = await res.json();
+    if (res.ok) applyGame(data.game);
+  }, [gameId, playerId, applyGame]);
+
+  const handleRematch = useCallback(async () => {
+    const res = await fetch(`/api/games/${gameId}/rematch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ playerId }),
@@ -169,6 +187,11 @@ export function GameRoom({ gameId }: { gameId: string }) {
     );
   }
 
+  if (game.status === "countdown") {
+    const secondsLeft = Math.max(0, Math.ceil(((game.rematchStartsAt ?? now) - now) / 1000));
+    return <CountdownView secondsLeft={secondsLeft} />;
+  }
+
   if (game.status === "playing") {
     const round = game.rounds[game.currentRoundIndex];
     const elapsedMs = round.winnerId
@@ -191,7 +214,7 @@ export function GameRoom({ gameId }: { gameId: string }) {
     );
   }
 
-  return <FinishedView game={game} meId={me.id} />;
+  return <FinishedView game={game} meId={me.id} onRematch={handleRematch} />;
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -333,6 +356,20 @@ function Lobby({
   );
 }
 
+function CountdownView({ secondsLeft }: { secondsLeft: number }) {
+  const { t } = useI18n();
+  return (
+    <Centered>
+      <div className="text-5xl">🔄</div>
+      <h1 className="text-2xl font-bold">{t("rematchTitle")}</h1>
+      <div className="text-9xl font-black tabular-nums leading-none">{secondsLeft}</div>
+      <p className="text-zinc-500 dark:text-zinc-400">
+        {t("rematchStartingIn", { seconds: secondsLeft })}
+      </p>
+    </Centered>
+  );
+}
+
 function PlayingView({
   game,
   meId,
@@ -397,7 +434,15 @@ function PlayingView({
   );
 }
 
-function FinishedView({ game, meId }: { game: Game; meId: string }) {
+function FinishedView({
+  game,
+  meId,
+  onRematch,
+}: {
+  game: Game;
+  meId: string;
+  onRematch: () => void;
+}) {
   const { t } = useI18n();
   const scores = game.players
     .map((p) => ({
@@ -428,12 +473,12 @@ function FinishedView({ game, meId }: { game: Game; meId: string }) {
         </ul>
       </div>
 
-      <Link
-        href="/"
+      <button
+        onClick={onRematch}
         className="w-full max-w-sm rounded-full bg-emerald-600 py-4 text-center text-lg font-bold text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400"
       >
         {t("playAgain")}
-      </Link>
+      </button>
     </Centered>
   );
 }

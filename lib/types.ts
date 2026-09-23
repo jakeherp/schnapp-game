@@ -12,7 +12,7 @@ export type Round = {
   nextRoundAt?: number;
 };
 
-export type GameStatus = "lobby" | "playing" | "finished";
+export type GameStatus = "lobby" | "playing" | "countdown" | "finished";
 
 export type RoundCount = 5 | 10 | 15 | 20;
 
@@ -27,6 +27,7 @@ export type Game = {
   emojiGrid: string[];
   rounds: Round[];
   currentRoundIndex: number;
+  rematchStartsAt?: number;
   createdAt: number;
   updatedAt: number;
 };

@@ -5,6 +5,7 @@ import type { Game, Player, RoundCount } from "./types";
 
 const GAME_TTL_SECONDS = 6 * 60 * 60;
 const ROUND_RESULT_PAUSE_MS = 2000;
+const REMATCH_COUNTDOWN_MS = 3000;
 const MAX_NAME_LENGTH = 30;
 
 export class GameError extends Error {
@@ -138,12 +139,45 @@ export async function submitAnswer(
   return game;
 }
 
-// Self-healing round progression: any client's GET poll can advance the
-// game past a decided round, so no background job/cron is needed. Reads
-// and writes aren't transactional — with only a couple of casual players
-// polling every ~800ms the risk of a double-advance race is negligible.
+// Any player (not just the host) can call for a rematch — resets the same
+// game in place, keeping the players and shareable link, instead of making
+// everyone rejoin a brand new game.
+export async function requestRematch(id: string, playerId: string): Promise<Game> {
+  const game = await requireGame(id);
+  if (game.status !== "finished") {
+    throw new GameError("Game is not finished yet", 400);
+  }
+  if (!game.players.some((p) => p.id === playerId)) {
+    throw new GameError("You're not in this game", 403);
+  }
+
+  game.status = "countdown";
+  game.emojiGrid = generateGameEmojiGrid();
+  game.rounds = [];
+  game.currentRoundIndex = -1;
+  game.rematchStartsAt = Date.now() + REMATCH_COUNTDOWN_MS;
+  await saveGame(game);
+  return game;
+}
+
+// Self-healing progression: any client's GET poll can advance the game past
+// a decided round or an elapsed rematch countdown, so no background
+// job/cron is needed. Reads and writes aren't transactional — with only a
+// couple of casual players polling every ~800ms the risk of a double-advance
+// race is negligible.
 export async function getGameAndAdvance(id: string): Promise<Game> {
   const game = await requireGame(id);
+
+  if (game.status === "countdown") {
+    if (game.rematchStartsAt && Date.now() >= game.rematchStartsAt) {
+      game.status = "playing";
+      game.currentRoundIndex = 0;
+      game.rounds = [{ emoji: pickRoundEmoji(game.emojiGrid), startedAt: Date.now() }];
+      await saveGame(game);
+    }
+    return game;
+  }
+
   if (game.status !== "playing") return game;
 
   const round = game.rounds[game.currentRoundIndex];

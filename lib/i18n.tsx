@@ -51,6 +51,8 @@ const en: Dict = {
   gameOver: "Game over!",
   roundsWonLabel: "{count} rounds",
   playAgain: "Play again",
+  rematchTitle: "Rematch!",
+  rematchStartingIn: "Starting in {seconds}…",
 };
 
 const de: Dict = {
@@ -88,6 +90,8 @@ const de: Dict = {
   gameOver: "Spiel vorbei!",
   roundsWonLabel: "{count} Runden",
   playAgain: "Nochmal spielen",
+  rematchTitle: "Revanche!",
+  rematchStartingIn: "Start in {seconds}…",
 };
 
 const es: Dict = {
@@ -125,6 +129,8 @@ const es: Dict = {
   gameOver: "¡Partida terminada!",
   roundsWonLabel: "{count} rondas",
   playAgain: "Jugar de nuevo",
+  rematchTitle: "¡Revancha!",
+  rematchStartingIn: "Empieza en {seconds}…",
 };
 
 const dictionaries: Record<Locale, Dict> = { en, de, es };
