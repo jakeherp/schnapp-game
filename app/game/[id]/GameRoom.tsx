@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EMOJI_SET } from "@/lib/emojis";
+import { LanguageSwitcher, useI18n } from "@/lib/i18n";
 import {
   getLastName,
   getStoredPlayerId,
@@ -16,6 +17,7 @@ const POLL_MS = 800;
 const TICK_MS = 100;
 
 export function GameRoom({ gameId }: { gameId: string }) {
+  const { t } = useI18n();
   const [game, setGame] = useState<Game | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -142,9 +144,9 @@ export function GameRoom({ gameId }: { gameId: string }) {
   if (notFound) {
     return (
       <Centered>
-        <p className="text-lg text-zinc-600">This game doesn&apos;t exist (or expired).</p>
-        <Link href="/" className="text-emerald-600 underline">
-          Start a new game
+        <p className="text-lg text-zinc-600 dark:text-zinc-400">{t("gameNotFound")}</p>
+        <Link href="/" className="text-emerald-600 underline dark:text-emerald-400">
+          {t("startNewGame")}
         </Link>
       </Centered>
     );
@@ -153,7 +155,7 @@ export function GameRoom({ gameId }: { gameId: string }) {
   if (!game) {
     return (
       <Centered>
-        <p className="text-zinc-500">Loading…</p>
+        <p className="text-zinc-500 dark:text-zinc-400">{t("loading")}</p>
       </Centered>
     );
   }
@@ -195,13 +197,17 @@ export function GameRoom({ gameId }: { gameId: string }) {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+    <div className="relative flex flex-1 flex-col items-center justify-center gap-4 px-6 py-16 text-center">
+      <div className="absolute top-4 right-4">
+        <LanguageSwitcher />
+      </div>
       {children}
     </div>
   );
 }
 
 function JoinForm({ onJoin }: { onJoin: (name: string) => Promise<void> }) {
+  const { t } = useI18n();
   const [name, setName] = useState(() => getLastName());
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -209,7 +215,7 @@ function JoinForm({ onJoin }: { onJoin: (name: string) => Promise<void> }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Enter a name first");
+      setError(t("enterNameFirst"));
       return;
     }
     setJoining(true);
@@ -217,7 +223,7 @@ function JoinForm({ onJoin }: { onJoin: (name: string) => Promise<void> }) {
     try {
       await onJoin(name);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not join");
+      setError(err instanceof Error ? err.message : t("joinError"));
       setJoining(false);
     }
   }
@@ -225,23 +231,23 @@ function JoinForm({ onJoin }: { onJoin: (name: string) => Promise<void> }) {
   return (
     <Centered>
       <div className="text-5xl">🙌</div>
-      <h1 className="text-2xl font-bold">Join the game</h1>
+      <h1 className="text-2xl font-bold">{t("joinTitle")}</h1>
       <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Your name"
+          placeholder={t("namePlaceholderJoin")}
           maxLength={30}
           autoFocus
-          className="rounded-xl border border-zinc-300 px-4 py-3 text-lg outline-none focus:border-zinc-900"
+          className="rounded-xl border border-zinc-300 px-4 py-3 text-lg text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-zinc-400"
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button
           type="submit"
           disabled={joining}
-          className="rounded-full bg-emerald-600 py-4 text-lg font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="rounded-full bg-emerald-600 py-4 text-lg font-bold text-white hover:bg-emerald-700 disabled:opacity-60 dark:bg-emerald-500 dark:hover:bg-emerald-400"
         >
-          {joining ? "Joining…" : "Join game"}
+          {joining ? t("joiningGame") : t("joinGame")}
         </button>
       </form>
     </Centered>
@@ -257,6 +263,7 @@ function Lobby({
   isHost: boolean;
   onStart: () => void;
 }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const [link, setLink] = useState("");
 
@@ -269,7 +276,7 @@ function Lobby({
   async function share() {
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Join my Schnapp game!", url: link });
+        await navigator.share({ title: t("shareTitle"), url: link });
         return;
       } catch {
         // user cancelled share sheet — fall through to copy
@@ -282,25 +289,31 @@ function Lobby({
 
   return (
     <Centered>
-      <h1 className="text-2xl font-bold">Waiting to start</h1>
-      <p className="text-zinc-500">{game.totalRounds} rounds</p>
+      <h1 className="text-2xl font-bold">{t("waitingToStart")}</h1>
+      <p className="text-zinc-500 dark:text-zinc-400">
+        {t("roundsCount", { count: game.totalRounds })}
+      </p>
 
       <button
         onClick={share}
-        className="w-full max-w-sm rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-600 hover:border-zinc-900"
+        className="w-full max-w-sm rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-600 hover:border-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-400"
       >
-        {copied ? "Link copied!" : link || "Share link"}
+        {copied ? t("linkCopied") : link || t("shareLink")}
       </button>
 
-      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-600">Players</h2>
+      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <h2 className="mb-3 text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+          {t("playersHeading")}
+        </h2>
         <ul className="flex flex-col gap-2">
           {game.players.map((p) => (
             <li key={p.id} className="flex items-center gap-2 text-lg">
               <span>👤</span>
               <span className="font-medium">{p.name}</span>
               {p.id === game.hostId && (
-                <span className="text-xs text-zinc-400">host</span>
+                <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                  {t("hostLabel")}
+                </span>
               )}
             </li>
           ))}
@@ -310,12 +323,12 @@ function Lobby({
       {isHost ? (
         <button
           onClick={onStart}
-          className="w-full max-w-sm rounded-full bg-emerald-600 py-4 text-lg font-bold text-white hover:bg-emerald-700"
+          className="w-full max-w-sm rounded-full bg-emerald-600 py-4 text-lg font-bold text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400"
         >
-          Start game
+          {t("startGameButton")}
         </button>
       ) : (
-        <p className="text-zinc-500">Waiting for the host to start…</p>
+        <p className="text-zinc-500 dark:text-zinc-400">{t("waitingForHost")}</p>
       )}
     </Centered>
   );
@@ -338,12 +351,13 @@ function PlayingView({
   wrongFlash: string | null;
   onAnswer: (emoji: string) => void;
 }) {
+  const { t } = useI18n();
   const isMyWin = round.winnerId === meId;
 
   return (
     <div className="flex flex-1 flex-col items-center gap-6 px-4 py-8">
-      <div className="text-sm text-zinc-400">
-        Round {game.currentRoundIndex + 1} / {game.totalRounds}
+      <div className="text-sm text-zinc-400 dark:text-zinc-500">
+        {t("roundOf", { current: game.currentRoundIndex + 1, total: game.totalRounds })}
       </div>
 
       <div className="text-4xl font-mono font-bold tabular-nums">
@@ -355,10 +369,12 @@ function PlayingView({
       {winnerName && (
         <div
           className={`rounded-full px-5 py-2 text-lg font-bold ${
-            isMyWin ? "bg-emerald-100 text-emerald-700" : "bg-zinc-200 text-zinc-700"
+            isMyWin
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+              : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
           }`}
         >
-          {isMyWin ? "You won this round! 🎉" : `${winnerName} was faster!`}
+          {isMyWin ? t("youWonRound") : t("opponentFaster", { name: winnerName ?? "" })}
         </div>
       )}
 
@@ -369,7 +385,9 @@ function PlayingView({
             disabled={!!round.winnerId}
             onClick={() => onAnswer(emoji)}
             className={`aspect-square rounded-2xl text-3xl transition-transform active:scale-90 disabled:opacity-40 ${
-              wrongFlash === emoji ? "bg-red-200" : "bg-white border border-zinc-200"
+              wrongFlash === emoji
+                ? "bg-red-200 dark:bg-red-900/60"
+                : "bg-white border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700"
             }`}
           >
             {emoji}
@@ -381,6 +399,7 @@ function PlayingView({
 }
 
 function FinishedView({ game, meId }: { game: Game; meId: string }) {
+  const { t } = useI18n();
   const scores = game.players
     .map((p) => ({
       ...p,
@@ -392,9 +411,9 @@ function FinishedView({ game, meId }: { game: Game; meId: string }) {
   return (
     <Centered>
       <div className="text-5xl">🏆</div>
-      <h1 className="text-2xl font-bold">Game over!</h1>
+      <h1 className="text-2xl font-bold">{t("gameOver")}</h1>
 
-      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <ul className="flex flex-col gap-3">
           {scores.map((p) => (
             <li key={p.id} className="flex items-center justify-between">
@@ -402,7 +421,9 @@ function FinishedView({ game, meId }: { game: Game; meId: string }) {
                 {p.name}
                 {p.wins === topWins && topWins > 0 ? " 👑" : ""}
               </span>
-              <span className="text-zinc-500">{p.wins} rounds</span>
+              <span className="text-zinc-500 dark:text-zinc-400">
+                {t("roundsWonLabel", { count: p.wins })}
+              </span>
             </li>
           ))}
         </ul>
@@ -410,9 +431,9 @@ function FinishedView({ game, meId }: { game: Game; meId: string }) {
 
       <Link
         href="/"
-        className="w-full max-w-sm rounded-full bg-emerald-600 py-4 text-center text-lg font-bold text-white hover:bg-emerald-700"
+        className="w-full max-w-sm rounded-full bg-emerald-600 py-4 text-center text-lg font-bold text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400"
       >
-        Play again
+        {t("playAgain")}
       </Link>
     </Centered>
   );
