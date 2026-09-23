@@ -1,23 +1,38 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
-import { getAllScores, getLastName, setLastName, setStoredPlayerId } from "@/lib/local-scores";
+import {
+  getAllScores,
+  getLastName,
+  setLastName,
+  setStoredPlayerId,
+  type PlayerStats,
+} from "@/lib/local-scores";
 import { ROUND_COUNTS, type RoundCount } from "@/lib/types";
+
+type ScoreRow = PlayerStats & { playerName: string };
 
 export default function Home() {
   const router = useRouter();
   const { t } = useI18n();
-  const [name, setName] = useState(() => getLastName());
+  const [name, setName] = useState("");
   const [totalRounds, setTotalRounds] = useState<RoundCount>(10);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scores, setScores] = useState<ScoreRow[]>([]);
 
-  const scores = useMemo(() => {
-    return Object.entries(getAllScores())
+  useEffect(() => {
+    // Read once after mount — SSR has no localStorage, so this can't be an
+    // initializer (the client's first render would then diverge from the
+    // server-rendered HTML and React would flag a hydration mismatch).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setName(getLastName());
+    const rows = Object.entries(getAllScores())
       .map(([playerName, stats]) => ({ playerName, ...stats }))
       .sort((a, b) => b.totalRoundWins - a.totalRoundWins);
+    setScores(rows);
   }, []);
 
   async function handleCreate(e: React.FormEvent) {

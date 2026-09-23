@@ -1,4 +1,4 @@
-import { pickRoundEmoji } from "./emojis";
+import { generateGameEmojiGrid, pickRoundEmoji } from "./emojis";
 import { generateId } from "./id";
 import { getKv } from "./redis";
 import type { Game, Player, RoundCount } from "./types";
@@ -54,6 +54,7 @@ export async function createGame(
     totalRounds,
     status: "lobby",
     players: [host],
+    emojiGrid: generateGameEmojiGrid(),
     rounds: [],
     currentRoundIndex: -1,
     createdAt: Date.now(),
@@ -104,7 +105,7 @@ export async function startGame(id: string, playerId: string): Promise<Game> {
 
   game.status = "playing";
   game.currentRoundIndex = 0;
-  game.rounds = [{ emoji: pickRoundEmoji(), startedAt: Date.now() }];
+  game.rounds = [{ emoji: pickRoundEmoji(game.emojiGrid), startedAt: Date.now() }];
   await saveGame(game);
   return game;
 }
@@ -155,7 +156,7 @@ export async function getGameAndAdvance(id: string): Promise<Game> {
   } else {
     game.currentRoundIndex += 1;
     game.rounds.push({
-      emoji: pickRoundEmoji(round.emoji),
+      emoji: pickRoundEmoji(game.emojiGrid, round.emoji),
       startedAt: Date.now(),
     });
   }

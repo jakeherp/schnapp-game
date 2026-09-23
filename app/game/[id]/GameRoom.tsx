@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { EMOJI_SET } from "@/lib/emojis";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
 import {
   getLastName,
@@ -379,7 +378,7 @@ function PlayingView({
       )}
 
       <div className="mt-auto grid w-full max-w-2xl grid-cols-6 gap-2 sm:grid-cols-8">
-        {EMOJI_SET.map((emoji) => (
+        {game.emojiGrid.map((emoji) => (
           <button
             key={emoji}
             disabled={!!round.winnerId}

@@ -24,6 +24,7 @@ export type Game = {
   totalRounds: RoundCount;
   status: GameStatus;
   players: Player[];
+  emojiGrid: string[];
   rounds: Round[];
   currentRoundIndex: number;
   createdAt: number;
