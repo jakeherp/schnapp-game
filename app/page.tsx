@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LanguageSwitcher, useI18n } from "@/lib/i18n";
+import type { LeaderboardEntry } from "@/lib/leaderboard";
 import {
   getAllScores,
   getLastName,
@@ -22,6 +23,7 @@ export default function Home() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scores, setScores] = useState<ScoreRow[]>([]);
+  const [globalScores, setGlobalScores] = useState<LeaderboardEntry[]>([]);
 
   useEffect(() => {
     // Read once after mount — SSR has no localStorage, so this can't be an
@@ -31,8 +33,23 @@ export default function Home() {
     setName(getLastName());
     const rows = Object.entries(getAllScores())
       .map(([playerName, stats]) => ({ playerName, ...stats }))
-      .sort((a, b) => b.totalRoundWins - a.totalRoundWins);
+      .sort((a, b) => b.totalRoundsFound - a.totalRoundsFound);
     setScores(rows);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/leaderboard")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled) setGlobalScores(data.entries ?? []);
+      })
+      .catch(() => {
+        // Global board is a nice-to-have — silently skip on network failure.
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleCreate(e: React.FormEvent) {
@@ -132,10 +149,33 @@ export default function Home() {
               <li key={s.playerName} className="flex flex-col text-sm">
                 <span className="font-medium">{s.playerName}</span>
                 <span className="text-zinc-500 dark:text-zinc-400">
-                  {t("scoreStats", { wins: s.totalRoundWins, won: s.gamesWon, played: s.gamesPlayed })}
-                  {s.bestTimeMs !== null
-                    ? t("scoreBest", { time: (s.bestTimeMs / 1000).toFixed(2) })
+                  {t("scoreStats", { found: s.totalRoundsFound, won: s.gamesWon, played: s.gamesPlayed })}
+                  {s.bestAvgMs !== null
+                    ? t("scoreBest", { time: (s.bestAvgMs / 1000).toFixed(2) })
                     : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {globalScores.length > 0 && (
+        <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-3 text-sm font-semibold text-zinc-600 dark:text-zinc-400">
+            {t("globalHighScoresTitle")}
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {globalScores.map((s, i) => (
+              <li key={s.name} className="flex items-center gap-3 text-sm">
+                <span className="w-4 text-zinc-400 dark:text-zinc-500">{i + 1}</span>
+                <span className="flex-1 font-medium">{s.name}</span>
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  {t("globalScoreStats", {
+                    time: ((s.bestAvgMs ?? 0) / 1000).toFixed(2),
+                    gamesWon: s.gamesWon,
+                    gamesPlayed: s.gamesPlayed,
+                  })}
                 </span>
               </li>
             ))}

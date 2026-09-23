@@ -3,6 +3,9 @@ import { Redis } from "@upstash/redis";
 interface Kv {
   get<T>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds: number): Promise<void>;
+  // No expiry — for data meant to persist indefinitely (e.g. the leaderboard),
+  // unlike individual games which are meant to be cleaned up automatically.
+  setForever(key: string, value: unknown): Promise<void>;
 }
 
 class UpstashKv implements Kv {
@@ -18,6 +21,10 @@ class UpstashKv implements Kv {
 
   async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {
     await this.client.set(key, value, { ex: ttlSeconds });
+  }
+
+  async setForever(key: string, value: unknown): Promise<void> {
+    await this.client.set(key, value);
   }
 }
 
@@ -40,6 +47,10 @@ class InMemoryKv implements Kv {
 
   async set(key: string, value: unknown, ttlSeconds: number): Promise<void> {
     this.store.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+  }
+
+  async setForever(key: string, value: unknown): Promise<void> {
+    this.store.set(key, { value, expiresAt: Infinity });
   }
 }
 

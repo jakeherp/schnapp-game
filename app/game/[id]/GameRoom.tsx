@@ -10,7 +10,8 @@ import {
   setLastName,
   setStoredPlayerId,
 } from "@/lib/local-scores";
-import type { Game } from "@/lib/types";
+import { computeGameResults } from "@/lib/scoring";
+import type { Game, PlayerRoundResult } from "@/lib/types";
 
 const POLL_MS = 800;
 const TICK_MS = 100;
@@ -21,7 +22,6 @@ export function GameRoom({ gameId }: { gameId: string }) {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [wrongFlash, setWrongFlash] = useState<string | null>(null);
   const scoreRecordedRef = useRef(false);
 
   // Responses (polls and actions) can arrive out of order over a flaky
@@ -70,12 +70,14 @@ export function GameRoom({ gameId }: { gameId: string }) {
 
   useEffect(() => {
     const currentRound = game?.rounds[game.currentRoundIndex];
+    const myResult = playerId ? currentRound?.results[playerId] : undefined;
     const ticking =
-      game?.status === "countdown" || (game?.status === "playing" && !currentRound?.winnerId);
+      game?.status === "countdown" ||
+      (game?.status === "playing" && myResult?.completedAt === undefined);
     if (!ticking) return;
     const interval = setInterval(() => setNow(Date.now()), TICK_MS);
     return () => clearInterval(interval);
-  }, [game]);
+  }, [game, playerId]);
 
   const me = game?.players.find((p) => p.id === playerId);
 
@@ -89,18 +91,8 @@ export function GameRoom({ gameId }: { gameId: string }) {
     if (!game || game.status !== "finished" || !me || scoreRecordedRef.current) return;
     scoreRecordedRef.current = true;
 
-    const wins = game.players.map((p) => ({
-      id: p.id,
-      wins: game.rounds.filter((r) => r.winnerId === p.id).length,
-    }));
-    const maxWins = Math.max(0, ...wins.map((w) => w.wins));
-    const myWins = wins.find((w) => w.id === me.id)?.wins ?? 0;
-    const myTimes = game.rounds
-      .filter((r) => r.winnerId === me.id && r.winnerTimeMs !== undefined)
-      .map((r) => r.winnerTimeMs as number);
-    const bestTimeMs = myTimes.length > 0 ? Math.min(...myTimes) : null;
-
-    recordGameResult(me.name, myWins, myWins === maxWins && maxWins > 0, bestTimeMs);
+    const mine = computeGameResults(game).find((r) => r.playerId === me.id);
+    if (mine) recordGameResult(mine.name, mine.roundsFound, mine.won, mine.avgTimeMs);
   }, [game, me]);
 
   const handleJoin = useCallback(
@@ -142,18 +134,16 @@ export function GameRoom({ gameId }: { gameId: string }) {
 
   const handleAnswer = useCallback(
     async (emoji: string) => {
+      // Right or wrong, a tap is valid gameplay now (not an error) — the
+      // response carries the outcome (round-store.submitAnswer records
+      // wrong taps on the player's own result instead of rejecting them).
       const res = await fetch(`/api/games/${gameId}/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playerId, emoji }),
       });
       const data = await res.json();
-      if (res.ok) {
-        applyGame(data.game);
-      } else {
-        setWrongFlash(emoji);
-        setTimeout(() => setWrongFlash(null), 250);
-      }
+      if (res.ok) applyGame(data.game);
     },
     [gameId, playerId, applyGame]
   );
@@ -194,21 +184,18 @@ export function GameRoom({ gameId }: { gameId: string }) {
 
   if (game.status === "playing") {
     const round = game.rounds[game.currentRoundIndex];
-    const elapsedMs = round.winnerId
-      ? (round.winnerTimeMs ?? 0)
-      : Math.max(0, now - round.startedAt);
-    const winner = round.winnerId
-      ? game.players.find((p) => p.id === round.winnerId)
-      : null;
+    const myResult = round.results[me.id];
+    const elapsedMs =
+      myResult?.completedAt !== undefined
+        ? (myResult.timeMs ?? 0)
+        : Math.max(0, now - round.startedAt);
 
     return (
       <PlayingView
         game={game}
-        meId={me.id}
         round={round}
+        myResult={myResult}
         elapsedMs={elapsedMs}
-        winnerName={winner?.name ?? null}
-        wrongFlash={wrongFlash}
         onAnswer={handleAnswer}
       />
     );
@@ -372,23 +359,24 @@ function CountdownView({ secondsLeft }: { secondsLeft: number }) {
 
 function PlayingView({
   game,
-  meId,
   round,
+  myResult,
   elapsedMs,
-  winnerName,
-  wrongFlash,
   onAnswer,
 }: {
   game: Game;
-  meId: string;
   round: Game["rounds"][number];
+  myResult: PlayerRoundResult | undefined;
   elapsedMs: number;
-  winnerName: string | null;
-  wrongFlash: string | null;
   onAnswer: (emoji: string) => void;
 }) {
   const { t } = useI18n();
-  const isMyWin = round.winnerId === meId;
+  const completed = myResult?.completedAt !== undefined;
+  const wrongEmojis = myResult?.wrongEmojis ?? [];
+  const allComplete = game.players.every(
+    (p) => round.results[p.id]?.completedAt !== undefined
+  );
+  const waitingForOthers = completed && !allComplete;
 
   return (
     <div className="flex flex-1 flex-col items-center gap-6 px-4 py-8">
@@ -402,33 +390,42 @@ function PlayingView({
 
       <div className="text-9xl leading-none">{round.emoji}</div>
 
-      {winnerName && (
+      {completed && (
         <div
           className={`rounded-full px-5 py-2 text-lg font-bold ${
-            isMyWin
+            myResult?.outcome === "found"
               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
-              : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              : "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300"
           }`}
         >
-          {isMyWin ? t("youWonRound") : t("opponentFaster", { name: winnerName ?? "" })}
+          {myResult?.outcome === "found"
+            ? t("foundIt", { time: ((myResult.timeMs ?? 0) / 1000).toFixed(1) })
+            : t("roundMissed")}
         </div>
       )}
 
+      {waitingForOthers && (
+        <p className="text-zinc-500 dark:text-zinc-400">{t("waitingForOthers")}</p>
+      )}
+
       <div className="mt-auto grid w-full max-w-2xl grid-cols-6 gap-2 sm:grid-cols-8">
-        {game.emojiGrid.map((emoji) => (
-          <button
-            key={emoji}
-            disabled={!!round.winnerId}
-            onClick={() => onAnswer(emoji)}
-            className={`aspect-square rounded-2xl text-3xl transition-transform active:scale-90 disabled:opacity-40 ${
-              wrongFlash === emoji
-                ? "bg-red-200 dark:bg-red-900/60"
-                : "bg-white border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700"
-            }`}
-          >
-            {emoji}
-          </button>
-        ))}
+        {game.emojiGrid.map((emoji) => {
+          const isWrong = wrongEmojis.includes(emoji);
+          return (
+            <button
+              key={emoji}
+              disabled={completed || isWrong}
+              onClick={() => onAnswer(emoji)}
+              className={`aspect-square rounded-2xl text-3xl transition-transform active:scale-90 disabled:opacity-40 ${
+                isWrong
+                  ? "bg-red-200 dark:bg-red-900/60"
+                  : "bg-white border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700"
+              }`}
+            >
+              {emoji}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -444,13 +441,13 @@ function FinishedView({
   onRematch: () => void;
 }) {
   const { t } = useI18n();
-  const scores = game.players
-    .map((p) => ({
-      ...p,
-      wins: game.rounds.filter((r) => r.winnerId === p.id).length,
-    }))
-    .sort((a, b) => b.wins - a.wins);
-  const topWins = scores[0]?.wins ?? 0;
+  // Lower average time wins — a player with no completed rounds (e.g. they
+  // never answered anything) sorts last.
+  const scores = computeGameResults(game).sort((a, b) => {
+    if (a.avgTimeMs === null) return b.avgTimeMs === null ? 0 : 1;
+    if (b.avgTimeMs === null) return -1;
+    return a.avgTimeMs - b.avgTimeMs;
+  });
 
   return (
     <Centered>
@@ -460,13 +457,18 @@ function FinishedView({
       <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <ul className="flex flex-col gap-3">
           {scores.map((p) => (
-            <li key={p.id} className="flex items-center justify-between">
-              <span className={`text-lg ${p.id === meId ? "font-bold" : "font-medium"}`}>
+            <li key={p.playerId} className="flex items-center justify-between">
+              <span
+                className={`text-lg ${p.playerId === meId ? "font-bold" : "font-medium"}`}
+              >
                 {p.name}
-                {p.wins === topWins && topWins > 0 ? " 👑" : ""}
+                {p.won ? " 👑" : ""}
               </span>
               <span className="text-zinc-500 dark:text-zinc-400">
-                {t("roundsWonLabel", { count: p.wins })}
+                {t("roundSummary", { found: p.roundsFound, missed: p.roundsMissed })}
+                {p.avgTimeMs !== null
+                  ? t("avgTimeSuffix", { time: (p.avgTimeMs / 1000).toFixed(2) })
+                  : ""}
               </span>
             </li>
           ))}

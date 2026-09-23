@@ -6,8 +6,9 @@ const SCORES_KEY = "schnapp:scores";
 export type PlayerStats = {
   gamesPlayed: number;
   gamesWon: number;
-  totalRoundWins: number;
-  bestTimeMs: number | null;
+  totalRoundsFound: number;
+  // Best (lowest) average per-round time achieved in any single game.
+  bestAvgMs: number | null;
   updatedAt: number;
 };
 
@@ -54,22 +55,22 @@ export function getAllScores(): ScoreBoard {
 
 export function recordGameResult(
   name: string,
-  roundWins: number,
+  roundsFound: number,
   won: boolean,
-  bestTimeMs: number | null
+  avgTimeMs: number | null
 ): void {
   const scores = readScores();
   const prev = scores[name];
   scores[name] = {
     gamesPlayed: (prev?.gamesPlayed ?? 0) + 1,
     gamesWon: (prev?.gamesWon ?? 0) + (won ? 1 : 0),
-    totalRoundWins: (prev?.totalRoundWins ?? 0) + roundWins,
-    bestTimeMs:
-      bestTimeMs === null
-        ? (prev?.bestTimeMs ?? null)
-        : prev?.bestTimeMs !== null && prev?.bestTimeMs !== undefined
-          ? Math.min(prev.bestTimeMs, bestTimeMs)
-          : bestTimeMs,
+    totalRoundsFound: (prev?.totalRoundsFound ?? 0) + roundsFound,
+    bestAvgMs:
+      avgTimeMs === null
+        ? (prev?.bestAvgMs ?? null)
+        : prev?.bestAvgMs != null
+          ? Math.min(prev.bestAvgMs, avgTimeMs)
+          : avgTimeMs,
     updatedAt: Date.now(),
   };
   writeScores(scores);
