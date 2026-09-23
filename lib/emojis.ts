@@ -33,7 +33,10 @@ export function generateGameEmojiGrid(): string[] {
   return shuffled(MASTER_EMOJI_SET).slice(0, GRID_SIZE);
 }
 
-export function pickRoundEmoji(grid: readonly string[], previous?: string): string {
-  const candidates = grid.filter((e) => e !== previous);
+// GRID_SIZE (32) is always >= the largest round count (20), so there's
+// always at least one unused emoji left to draw for the next round.
+export function pickRoundEmoji(grid: readonly string[], used: readonly string[] = []): string {
+  const usedSet = new Set(used);
+  const candidates = grid.filter((e) => !usedSet.has(e));
   return candidates[Math.floor(Math.random() * candidates.length)];
 }

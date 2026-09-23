@@ -156,7 +156,10 @@ export async function getGameAndAdvance(id: string): Promise<Game> {
   } else {
     game.currentRoundIndex += 1;
     game.rounds.push({
-      emoji: pickRoundEmoji(game.emojiGrid, round.emoji),
+      emoji: pickRoundEmoji(
+        game.emojiGrid,
+        game.rounds.map((r) => r.emoji)
+      ),
       startedAt: Date.now(),
     });
   }
